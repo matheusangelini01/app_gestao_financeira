@@ -167,7 +167,17 @@ def get_database():
                     "Credencial Firebase não encontrada. Configure [firebase] "
                     "nos Secrets do Streamlit ou defina FIREBASE_CREDENTIALS_PATH."
                 ) from exc
-            firebase_credential = credentials.Certificate(dict(firebase_secrets))
+            firebase_config = dict(firebase_secrets)
+            if any(
+                isinstance(value, str) and "PREENCHA_" in value
+                for value in firebase_config.values()
+            ):
+                raise ValueError(
+                    "Os Secrets do Firebase ainda contêm valores de exemplo. "
+                    "Substitua todos os campos PREENCHA_ pelos valores do JSON "
+                    "da conta de serviço."
+                )
+            firebase_credential = credentials.Certificate(firebase_config)
 
         app = firebase_admin.initialize_app(firebase_credential)
     return firestore.client(app=app)
@@ -458,7 +468,7 @@ def show_expense_categories(transactions: list[dict]):
         for category, amount in totals.items()
     ]
     color_by_category = dict(zip(EXPENSE_CATEGORIES, EXPENSE_CATEGORY_COLORS))
-    chart_column, _ = st.columns([1, 2])
+    chart_column, legend_column = st.columns([1.1, 1])
     with chart_column:
         st.vega_lite_chart(
             data=chart_data,
@@ -491,6 +501,7 @@ def show_expense_categories(transactions: list[dict]):
             use_container_width=True,
             key="expense-category-chart",
         )
+    with legend_column:
         st.markdown(
             f'<p class="muted">Total gasto: <strong>{money(total_expenses)}</strong></p>',
             unsafe_allow_html=True,

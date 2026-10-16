@@ -38,7 +38,9 @@ Se o arquivo de credenciais estiver em outro local, defina a variável
    o repositório e `app.py`.
 3. Abra as configurações avançadas do deploy e cole o conteúdo preenchido de
    `.streamlit/secrets.toml` no campo **Secrets**. Nunca publique a chave no
-   repositório.
+   repositório. Substitua todos os valores `PREENCHA_` pelos dados reais do
+   JSON da conta de serviço; em `private_key`, cole a chave PEM completa,
+   incluindo as linhas `BEGIN PRIVATE KEY` e `END PRIVATE KEY`.
 
 Na tela inicial, é possível escolher uma foto de perfil (visível durante a
 sessão) e acompanhar o gráfico circular das despesas por categoria. Ao registrar
