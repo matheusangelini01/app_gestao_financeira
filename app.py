@@ -13,6 +13,7 @@ import firebase_admin
 import streamlit as st
 from google import genai
 from google.genai import errors as genai_errors
+from google.genai._interactions import APIError as GenAIInteractionsAPIError
 from streamlit.errors import StreamlitSecretNotFoundError
 from firebase_admin.exceptions import FirebaseError
 from firebase_admin import credentials, firestore
@@ -761,7 +762,19 @@ def show_analysis():
                     st.session_state.analysis_response = analyze_finances(
                         question.strip(), transactions
                     )
-            except (genai_errors.APIError, ValueError) as exc:
+            except (
+                GenAIInteractionsAPIError,
+                genai_errors.APIError,
+                ValueError,
+            ) as exc:
+                status_code = getattr(exc, "status_code", None)
+                error_details = getattr(exc, "message", str(exc))
+                if status_code:
+                    st.error(
+                        f"Não foi possível gerar a análise (erro Gemini "
+                        f"{status_code}): {error_details}"
+                    )
+                    return
                 st.error(f"Não foi possível gerar a análise: {exc}")
 
     if st.session_state.get("analysis_response"):
