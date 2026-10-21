@@ -494,21 +494,24 @@ def analyze_finances(question: str, transactions: list[dict]) -> str:
         ),
     }
     prompt = (
-        "Responda em português brasileiro à pergunta do usuário sobre as finanças. "
-        "Use somente os dados financeiros fornecidos, explique limitações quando "
-        "relevante e não invente informações. Ofereça observações claras e práticas, "
-        "sem apresentar a resposta como aconselhamento financeiro profissional.\n\n"
         f"Dados financeiros (JSON):\n{json.dumps(financial_data, ensure_ascii=False)}\n\n"
         f"Pergunta do usuário:\n{question}"
     )
     client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
+    response = client.interactions.create(
+        model="gemini-3.8-flash",
+        input=prompt,
+        system_instruction=(
+            "Responda em português brasileiro à pergunta do usuário sobre as finanças. "
+            "Use somente os dados financeiros fornecidos, explique limitações quando "
+            "relevante e não invente informações. Ofereça observações claras e práticas, "
+            "sem apresentar a resposta como aconselhamento financeiro profissional."
+        ),
+        store=False,
     )
-    if not response.text:
+    if not response.output_text:
         raise ValueError("O Gemini não retornou uma análise. Tente novamente.")
-    return response.text
+    return response.output_text
 
 
 def show_expense_categories(transactions: list[dict]):
