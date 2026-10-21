@@ -18,7 +18,13 @@ portanto não é necessária uma chave de API web do Firebase.
 
 3. Para desenvolvimento local, mantenha o arquivo de credenciais do Firebase
    ao lado de `app.py` ou preencha `.streamlit/secrets.toml`. Esse arquivo é
-   ignorado pelo Git.
+   ignorado pelo Git. Para usar o botão **Analisar**, inclua também a chave do
+   Gemini nesse arquivo:
+
+   ```toml
+   [gemini]
+   api_key = "SUA_CHAVE_DE_API_DO_GEMINI"
+   ```
 4. No console Firebase do projeto `app-gestao-finaceira`, habilite o Cloud
    Firestore e confirme que o banco `default` está criado.
 5. Inicie o aplicativo:
@@ -41,6 +47,13 @@ Se o arquivo de credenciais estiver em outro local, defina a variável
    repositório. Substitua todos os valores `PREENCHA_` pelos dados reais do
    JSON da conta de serviço; em `private_key`, cole a chave PEM completa,
    incluindo as linhas `BEGIN PRIVATE KEY` e `END PRIVATE KEY`.
+4. Para habilitar o botão **Analisar**, gere uma chave de API do Gemini e
+   adicione também ao campo **Secrets**:
+
+   ```toml
+   [gemini]
+   api_key = "SUA_CHAVE_DE_API_DO_GEMINI"
+   ```
 
 Na tela inicial, é possível escolher uma foto de perfil (visível durante a
 sessão) e acompanhar o gráfico circular das despesas por categoria. Ao registrar
@@ -48,6 +61,9 @@ uma despesa, selecione uma categoria; lançamentos antigos sem categoria são
 exibidos como “Outros”. O gráfico fica à esquerda, com valores e percentuais
 das categorias logo abaixo. No formulário, a descrição oferece opções comuns
 para receitas e despesas, além de permitir digitar uma descrição personalizada.
+O botão **Analisar** abre uma tela para perguntar sobre as finanças. A pergunta
+e os lançamentos do usuário autenticado são enviados ao Google Gemini; a chave
+de API deve permanecer nos Secrets e nunca ser publicada no repositório.
 
 ## Dados no Firestore
 

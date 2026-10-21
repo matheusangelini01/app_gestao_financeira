@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import html
+import json
 import os
 import re
 import secrets
@@ -10,6 +11,8 @@ from pathlib import Path
 
 import firebase_admin
 import streamlit as st
+from google import genai
+from google.genai import errors as genai_errors
 from streamlit.errors import StreamlitSecretNotFoundError
 from firebase_admin.exceptions import FirebaseError
 from firebase_admin import credentials, firestore
@@ -447,6 +450,67 @@ def load_transactions() -> list[dict]:
     )
 
 
+def gemini_api_key() -> str | None:
+    try:
+        api_key = st.secrets["gemini"]["api_key"]
+    except (KeyError, StreamlitSecretNotFoundError):
+        return None
+    return api_key.strip() if isinstance(api_key, str) and api_key.strip() else None
+
+
+def analyze_finances(question: str, transactions: list[dict]) -> str:
+    api_key = gemini_api_key()
+    if not api_key:
+        raise ValueError(
+            "Configure a chave em [gemini] api_key nos Secrets do Streamlit "
+            "para usar a análise."
+        )
+
+    income = sum(
+        float(item["amount"]) for item in transactions if item["type"] == "Receita"
+    )
+    expenses = sum(
+        float(item["amount"]) for item in transactions if item["type"] == "Despesa"
+    )
+    recent_transactions = [
+        {
+            "data": item["date"],
+            "tipo": item["type"],
+            "categoria": item.get("category") or "Outros",
+            "descricao": item["description"],
+            "valor": round(float(item["amount"]), 2),
+        }
+        for item in transactions[:200]
+    ]
+    financial_data = {
+        "quantidade_total_de_lancamentos": len(transactions),
+        "receitas_totais": round(income, 2),
+        "despesas_totais": round(expenses, 2),
+        "saldo": round(income - expenses, 2),
+        "lancamentos_mais_recentes": recent_transactions,
+        "observacao": (
+            "A lista inclui no máximo os 200 lançamentos mais recentes; "
+            "os totais consideram todos os lançamentos."
+        ),
+    }
+    prompt = (
+        "Responda em português brasileiro à pergunta do usuário sobre as finanças. "
+        "Use somente os dados financeiros fornecidos, explique limitações quando "
+        "relevante e não invente informações. Ofereça observações claras e práticas, "
+        "sem apresentar a resposta como aconselhamento financeiro profissional.\n\n"
+        f"Dados financeiros (JSON):\n{json.dumps(financial_data, ensure_ascii=False)}\n\n"
+        f"Pergunta do usuário:\n{question}"
+    )
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+    )
+    if not response.text:
+        raise ValueError("O Gemini não retornou uma análise. Tente novamente.")
+    return response.text
+
+
 def show_expense_categories(transactions: list[dict]):
     totals = {category: 0.0 for category in EXPENSE_CATEGORIES}
     for item in transactions:
@@ -519,7 +583,7 @@ def show_expense_categories(transactions: list[dict]):
 
 
 def show_home():
-    avatar_column, top_left, top_right = st.columns([1, 5, 1])
+    avatar_column, top_left, analysis_column, top_right = st.columns([1, 5, 2, 1])
     with avatar_column:
         photo = st.session_state.get("profile_photo")
         if photo:
@@ -561,9 +625,19 @@ def show_home():
         )
     with top_right:
         if st.button("Sair", use_container_width=True):
-            for key in ("user_id", "username", "page", "editing_transaction"):
+            for key in (
+                "user_id",
+                "username",
+                "page",
+                "editing_transaction",
+                "analysis_response",
+            ):
                 st.session_state.pop(key, None)
             st.session_state.clear_profile_photo = True
+            st.rerun()
+    with analysis_column:
+        if st.button("Analisar", use_container_width=True):
+            st.session_state.page = "analysis"
             st.rerun()
 
     try:
@@ -647,6 +721,51 @@ def show_home():
             st.rerun()
 
 
+def show_analysis():
+    back_column, _ = st.columns([1, 5])
+    with back_column:
+        if st.button("← Voltar", use_container_width=True):
+            st.session_state.page = "home"
+            st.rerun()
+
+    st.markdown('<h1 class="page-title">Analisar finanças</h1>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="muted">Pergunte sobre seus lançamentos. Os dados financeiros '
+        'serão enviados ao Google Gemini para gerar a análise.</p>',
+        unsafe_allow_html=True,
+    )
+    with st.form("financial_analysis_form"):
+        question = st.text_area(
+            "O que você quer analisar?",
+            max_chars=2000,
+            placeholder="Ex.: Como posso reduzir meus gastos com alimentação?",
+        )
+        submitted = st.form_submit_button("Analisar", type="primary")
+
+    if submitted:
+        st.session_state.pop("analysis_response", None)
+        if not question.strip():
+            st.error("Digite o que você quer analisar.")
+        else:
+            try:
+                transactions = load_transactions()
+            except (GoogleAPICallError, FirebaseError, OSError, ValueError) as exc:
+                st.error(f"Não foi possível carregar os lançamentos do Firebase: {exc}")
+                return
+
+            try:
+                with st.spinner("Analisando seus lançamentos com o Gemini..."):
+                    st.session_state.analysis_response = analyze_finances(
+                        question.strip(), transactions
+                    )
+            except (genai_errors.APIError, ValueError) as exc:
+                st.error(f"Não foi possível gerar a análise: {exc}")
+
+    if st.session_state.get("analysis_response"):
+        st.markdown("### Resultado")
+        st.markdown(st.session_state.analysis_response)
+
+
 def main():
     if st.session_state.pop("clear_profile_photo", False):
         st.session_state.pop("profile_photo", None)
@@ -655,6 +774,8 @@ def main():
         return
     if st.session_state.get("page") == "form":
         transaction_form(st.session_state.get("editing_transaction"))
+    elif st.session_state.get("page") == "analysis":
+        show_analysis()
     else:
         show_home()
 
